@@ -156,8 +156,11 @@ mod tests {
         let pipeline_task_spawner = Box::<TokioTaskExecutor>::default();
         let provider_factory = create_test_provider_factory_with_chain_spec(chain_spec.clone());
 
-        let blockchain_db =
-            BlockchainProvider2::with_latest(provider_factory.clone(), SealedHeader::default());
+        let blockchain_db = BlockchainProvider2::with_block_information(
+            provider_factory.clone(),
+            SealedHeader::default(),
+            SealedHeader::default(),
+        );
 
         let (_tx, rx) = watch::channel(FinishedExExHeight::NoExExs);
         let pruner =

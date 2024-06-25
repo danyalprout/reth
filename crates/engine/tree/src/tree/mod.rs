@@ -1527,7 +1527,8 @@ mod tests {
 
             let header = chain_spec.genesis_header().seal_slow();
             let engine_api_tree_state = EngineApiTreeState::new(10, 10, header.num_hash());
-            let canonical_in_memory_state = CanonicalInMemoryState::with_head(header);
+            let canonical_in_memory_state =
+                CanonicalInMemoryState::with_block_information(header.clone(), header);
 
             let (to_payload_service, payload_command_rx) = unbounded_channel();
             let payload_builder = PayloadBuilderHandle::new(to_payload_service);
@@ -1594,8 +1595,10 @@ mod tests {
             forkchoice_state_tracker: ForkchoiceStateTracker::default(),
         };
 
-        let header = blocks.first().unwrap().block().header.clone();
-        let canonical_in_memory_state = CanonicalInMemoryState::with_head(header);
+        let latest = blocks.first().unwrap().block().header.clone();
+        let finalized = latest.clone();
+        let canonical_in_memory_state =
+            CanonicalInMemoryState::with_block_information(latest, finalized);
 
         let (to_payload_service, payload_command_rx) = unbounded_channel();
         let payload_builder = PayloadBuilderHandle::new(to_payload_service);
