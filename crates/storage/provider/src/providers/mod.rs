@@ -1,11 +1,11 @@
 use crate::{
     AccountReader, BlockHashReader, BlockIdReader, BlockNumReader, BlockReader, BlockReaderIdExt,
     BlockSource, BlockchainTreePendingStateProvider, CanonChainTracker, ChainSpecProvider,
-    ChangeSetReader, DatabaseProviderFactory, EvmEnvProvider, FinalizedBlockReader, FullExecutionDataProvider,
-    HeaderProvider, ProviderError, PruneCheckpointReader, ReceiptProvider, ReceiptProviderIdExt,
-    RequestsProvider, StageCheckpointReader, StateProviderBox, StateProviderFactory,
-    StaticFileProviderFactory, TransactionVariant, TransactionsProvider, TreeViewer,
-    WithdrawalsProvider,
+    ChangeSetReader, DatabaseProviderFactory, EvmEnvProvider, FinalizedBlockReader,
+    FullExecutionDataProvider, HeaderProvider, ProviderError, PruneCheckpointReader,
+    ReceiptProvider, ReceiptProviderIdExt, RequestsProvider, StageCheckpointReader,
+    StateProviderBox, StateProviderFactory, StaticFileProviderFactory, TransactionVariant,
+    TransactionsProvider, TreeViewer, WithdrawalsProvider,
 };
 use reth_blockchain_tree_api::{
     error::{CanonicalError, InsertBlockError},
@@ -96,7 +96,7 @@ impl<DB> BlockchainProvider<DB> {
         latest: SealedHeader,
         finalized: SealedHeader,
     ) -> Self {
-        Self { database, tree, chain_info: ChainInfoTracker::new(latest, finalized) }
+        Self { database, tree, chain_info: ChainInfoTracker::new(latest, Some(finalized)) }
     }
 
     /// Sets the treeviewer for the provider.
@@ -118,19 +118,19 @@ where
         let best: ChainInfo = provider.chain_info()?;
         let latest_header = provider
             .header_by_number(best.best_number)?
-            .ok_or_else(|| ProviderError::HeaderNotFound(best.best_number.into()))?;
+            .ok_or(ProviderError::HeaderNotFound(best.best_number.into()))?;
 
         let finalized_block_number = provider.last_finalized_block_number()?;
         let finalized_header = provider
-            .header_by_number(finalized_block_number)?
-            .ok_or_else(|| ProviderError::HeaderNotFound(finalized_block_number.into()))?;
+            .sealed_header(finalized_block_number)?
+            .ok_or(ProviderError::HeaderNotFound(finalized_block_number.into()))?;
 
         drop(provider);
         Ok(Self::with_block_information(
             database,
             tree,
             latest_header.seal(best.best_hash),
-            finalized_header.seal_slow(),
+            finalized_header,
         ))
     }
 

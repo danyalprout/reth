@@ -2,10 +2,10 @@ use crate::{
     providers::StaticFileProvider, AccountReader, BlockHashReader, BlockIdReader, BlockNumReader,
     BlockReader, BlockReaderIdExt, BlockSource, CanonChainTracker, CanonStateNotifications,
     CanonStateSubscriptions, ChainSpecProvider, ChangeSetReader, DatabaseProviderFactory,
-    DatabaseProviderRO, EvmEnvProvider, HeaderProvider, ProviderError, ProviderFactory,
-    PruneCheckpointReader, ReceiptProvider, ReceiptProviderIdExt, RequestsProvider,
-    StageCheckpointReader, StateProviderBox, StateProviderFactory, StaticFileProviderFactory,
-    TransactionVariant, TransactionsProvider, WithdrawalsProvider,
+    DatabaseProviderRO, EvmEnvProvider, FinalizedBlockReader, HeaderProvider, ProviderError,
+    ProviderFactory, PruneCheckpointReader, ReceiptProvider, ReceiptProviderIdExt,
+    RequestsProvider, StageCheckpointReader, StateProviderBox, StateProviderFactory,
+    StaticFileProviderFactory, TransactionVariant, TransactionsProvider, WithdrawalsProvider,
 };
 use alloy_rpc_types_engine::ForkchoiceState;
 use reth_chain_state::CanonicalInMemoryState;
@@ -58,8 +58,17 @@ impl<DB> Clone for BlockchainProvider2<DB> {
 impl<DB> BlockchainProvider2<DB> {
     /// Create new provider instance that wraps the database and the blockchain tree, using the
     /// provided latest header to initialize the chain info tracker.
-    pub fn with_latest(database: ProviderFactory<DB>, latest: SealedHeader) -> Self {
-        Self { database, canonical_in_memory_state: CanonicalInMemoryState::with_head(latest) }
+    pub fn with_block_information(
+        database: ProviderFactory<DB>,
+        latest: SealedHeader,
+        finalized: SealedHeader,
+    ) -> Self {
+        Self {
+            database,
+            canonical_in_memory_state: CanonicalInMemoryState::with_block_information(
+                latest, finalized,
+            ),
+        }
     }
 }
 
@@ -72,13 +81,22 @@ where
     pub fn new(database: ProviderFactory<DB>) -> ProviderResult<Self> {
         let provider = database.provider()?;
         let best: ChainInfo = provider.chain_info()?;
-        match provider.header_by_number(best.best_number)? {
-            Some(header) => {
-                drop(provider);
-                Ok(Self::with_latest(database, header.seal(best.best_hash)))
-            }
-            None => Err(ProviderError::HeaderNotFound(best.best_number.into())),
-        }
+
+        let latest_header = provider
+            .header_by_number(best.best_number)?
+            .ok_or(ProviderError::HeaderNotFound(best.best_number.into()))?;
+
+        let finalized_block_number = provider.last_finalized_block_number()?;
+        let finalized_header = provider
+            .sealed_header(finalized_block_number)?
+            .ok_or(ProviderError::HeaderNotFound(finalized_block_number.into()))?;
+
+        drop(provider);
+        Ok(Self::with_block_information(
+            database,
+            latest_header.seal(best.best_hash),
+            finalized_header,
+        ))
     }
 
     /// Gets a clone of `canonical_in_memory_state`.
