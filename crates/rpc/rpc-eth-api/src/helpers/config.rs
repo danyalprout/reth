@@ -129,24 +129,24 @@ where
             );
 
             config.next = Some(self.build_fork_config_at(next_fork_timestamp, next_precompiles));
-        } else {
-            // If there is no fork scheduled, there is no "last" or "final" fork scheduled.
-            return Ok(config);
         }
 
-        let last_fork_timestamp = fork_timestamps.last().copied().unwrap();
-        let fake_header = {
-            let mut header = latest;
-            header.set_timestamp(last_fork_timestamp);
-            header
-        };
-        let last_precompiles = evm_to_precompiles_map(
-            self.evm_config
-                .evm_for_block(EmptyDB::default(), &fake_header)
-                .map_err(RethError::other)?,
-        );
+        if let Some(last_fork_timestamp) =
+            current_fork_idx.checked_sub(1).and_then(|idx| fork_timestamps.get(idx).copied())
+        {
+            let fake_header = {
+                let mut header = latest;
+                header.set_timestamp(last_fork_timestamp);
+                header
+            };
+            let last_precompiles = evm_to_precompiles_map(
+                self.evm_config
+                    .evm_for_block(EmptyDB::default(), &fake_header)
+                    .map_err(RethError::other)?,
+            );
 
-        config.last = Some(self.build_fork_config_at(last_fork_timestamp, last_precompiles));
+            config.last = Some(self.build_fork_config_at(last_fork_timestamp, last_precompiles));
+        }
 
         Ok(config)
     }

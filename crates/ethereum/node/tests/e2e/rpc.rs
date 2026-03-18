@@ -332,9 +332,51 @@ async fn test_eth_config() -> eyre::Result<()> {
 
     let config = provider.client().request_noparams::<EthConfig>("eth_config").await?;
 
-    assert_eq!(config.last.unwrap().activation_time, osaka_timestamp);
+    assert_eq!(config.last.unwrap().activation_time, 0);
     assert_eq!(config.current.activation_time, prague_timestamp);
     assert_eq!(config.next.unwrap().activation_time, osaka_timestamp);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_eth_config_terminal_fork_keeps_last() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let prague_timestamp = 10;
+    let osaka_timestamp = 20;
+
+    let chain_spec = Arc::new(
+        ChainSpecBuilder::default()
+            .chain(MAINNET.chain)
+            .genesis(serde_json::from_str(include_str!("../assets/genesis.json")).unwrap())
+            .cancun_activated()
+            .with_prague_at(prague_timestamp)
+            .with_osaka_at(osaka_timestamp)
+            .build(),
+    );
+
+    let (mut nodes, wallet) = setup_engine::<EthereumNode>(
+        1,
+        chain_spec.clone(),
+        false,
+        Default::default(),
+        eth_payload_attributes,
+    )
+    .await?;
+    let mut node = nodes.pop().unwrap();
+    let provider = ProviderBuilder::new()
+        .wallet(EthereumWallet::new(wallet.wallet_gen().swap_remove(0)))
+        .connect_http(node.rpc_url());
+
+    let _ = provider.send_transaction(TransactionRequest::default().to(Address::ZERO)).await?;
+    node.advance_block().await?;
+
+    let config = provider.client().request_noparams::<EthConfig>("eth_config").await?;
+
+    assert_eq!(config.last.unwrap().activation_time, prague_timestamp);
+    assert_eq!(config.current.activation_time, osaka_timestamp);
+    assert!(config.next.is_none());
 
     Ok(())
 }
